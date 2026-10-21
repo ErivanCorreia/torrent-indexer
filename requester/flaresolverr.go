@@ -46,6 +46,12 @@ func NewFlareSolverr(url string, timeoutMilli int, poolSize int) *FlareSolverr {
 		sessionPool: sessionPool,
 	}
 
+	// without an address there is nothing to talk to, the instance stays unavailable
+	if url == "" {
+		logging.Debug().Msg("FlareSolverr address not configured, it will not be used")
+		return f
+	}
+
 	err := f.FillSessionPool()
 	if err == nil {
 		f.initiated = true
@@ -206,10 +212,14 @@ type Response struct {
 	} `json:"solution"`
 }
 
+// ErrNotAvailable is returned when the FlareSolverr instance is not configured
+// or could not be reached.
+var ErrNotAvailable = fmt.Errorf("flaresolverr is not available")
+
 func (f *FlareSolverr) Get(ctx context.Context, _url string, attempts int) (io.ReadCloser, error) {
 	// Check if the FlareSolverr instance was initiated
 	if !f.initiated {
-		return io.NopCloser(bytes.NewReader([]byte(""))), nil
+		return nil, ErrNotAvailable
 	}
 
 	// Retrieve session from the pool (blocking if no sessions available)

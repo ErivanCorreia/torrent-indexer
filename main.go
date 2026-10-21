@@ -68,12 +68,14 @@ func main() {
 		logging.Info().Dur("expiration", shortLivedCacheExpiration).Msg("Setting short-lived cache expiration")
 		req.SetShortLivedCacheExpiration(shortLivedCacheExpiration)
 	}
-	longLivedCacheExpiration, err := str2duration.ParseDuration(os.Getenv("LONG_LIVED_CACHE_EXPIRATION"))
-	if err == nil {
-		logging.Info().Dur("expiration", longLivedCacheExpiration).Msg("Setting long-lived cache expiration")
-		redis.SetDefaultExpiration(longLivedCacheExpiration)
-	} else {
-		logging.Error().Err(err).Msg("Failed to parse long-lived cache expiration")
+	if v := os.Getenv("LONG_LIVED_CACHE_EXPIRATION"); v != "" {
+		longLivedCacheExpiration, err := str2duration.ParseDuration(v)
+		if err == nil {
+			logging.Info().Dur("expiration", longLivedCacheExpiration).Msg("Setting long-lived cache expiration")
+			redis.SetDefaultExpiration(longLivedCacheExpiration)
+		} else {
+			logging.Error().Err(err).Msg("Failed to parse long-lived cache expiration")
+		}
 	}
 
 	icfg := handler.IndexersConfig{

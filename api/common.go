@@ -105,9 +105,9 @@ var datePatterns = []datePattern{
 // getPublishedDateFromRawString extracts the date from a raw string using predefined patterns.
 func getPublishedDateFromRawString(dateStr string) time.Time {
 	for _, p := range datePatterns {
-		match := p.regex.FindString(dateStr)
-
-		if match != "" {
+		// all matches are tried, since a string may contain more than one
+		// date-like sequence, e.g. "movie-2026-21-10-2026"
+		for _, match := range p.regex.FindAllString(dateStr, -1) {
 			date, err := time.Parse(p.layout, match)
 			if err == nil {
 				return date.UTC()
@@ -217,6 +217,46 @@ func getIMDBLink(link string) (string, error) {
 		return "", fmt.Errorf("no imdb link found")
 	}
 	return imdbLink, nil
+}
+
+// getIMDBLinkFromDocument extracts the IMDB link from a document.
+// It looks at the links, the meta tags and the JSON-LD structured data,
+// e.g. "sameAs": "https://www.imdb.com/title/tt1234567/".
+func getIMDBLinkFromDocument(doc *goquery.Document) string {
+	var imdbLink string
+
+	doc.Find("a[href], link[href], meta[content]").Each(func(_ int, s *goquery.Selection) {
+		if imdbLink != "" {
+			return
+		}
+		href, _ := s.Attr("href")
+		if href == "" {
+			href, _ = s.Attr("content")
+		}
+		if link, err := getIMDBLink(href); err == nil {
+			imdbLink = link
+		}
+	})
+
+	if imdbLink != "" {
+		return imdbLink
+	}
+
+	// fallback: the link may only be available in the structured data
+	doc.Find("script[type=\"application/ld+json\"]").Each(func(_ int, s *goquery.Selection) {
+		if imdbLink != "" {
+			return
+		}
+		content := s.Text()
+		if !strings.Contains(content, "imdb.com") {
+			return
+		}
+		if link, err := getIMDBLink(content); err == nil {
+			imdbLink = link
+		}
+	})
+
+	return imdbLink
 }
 
 // appendAudioISO639_2Code appends the audio languages to the title in ISO 639-2 code format.

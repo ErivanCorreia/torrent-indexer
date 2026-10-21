@@ -25,10 +25,11 @@ type Indexer struct {
 }
 
 type IndexerMeta struct {
-	Label       string // Label is used for Prometheus metrics and logging. Must be alphanumeric optionally with underscores.
-	URL         string // URL is the base URL of the indexer, e.g. "https://example.com/"
-	SearchURL   string // SearchURL is the base URL for search queries, e.g. "?s="
-	PagePattern string // PagePattern for pagination, e.g. "page/%s"
+	Label        string   // Label is used for Prometheus metrics and logging. Must be alphanumeric optionally with underscores.
+	URL          string   // URL is the base URL of the indexer, e.g. "https://example.com/"
+	SearchURL    string   // SearchURL is the base URL for search queries, e.g. "?s="
+	PagePattern  string   // PagePattern for pagination, e.g. "page/%s"
+	FallbackURLs []string // FallbackURLs is an ordered list of alternative base URLs, tried when URL fails.
 }
 
 type Response struct {
@@ -120,7 +121,6 @@ func HandlerIndex(w http.ResponseWriter, r *http.Request) {
 			"comando_torrents",
 			"bludv",
 			"torrent-dos-filmes",
-			"filme_torrent",
 			"rede_torrent",
 			"vaca_torrent",
 			"starck-filmes",

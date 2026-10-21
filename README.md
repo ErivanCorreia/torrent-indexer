@@ -14,9 +14,9 @@ Visit [https://torrent-indexer.darklyn.org/](https://torrent-indexer.darklyn.org
 - [comando-torrents](https://comando.la/)
 - [bludv](https://bludvfilmes.tv/)
 - [torrent-dos-filmes](https://torrentdosfilmes.se/)
-- [starck-filmes](https://www.starckfilmes.fans/)
-- [rede-torrent](https://redetorrent.com/)
-- [vaca-torrent](https://vacatorrentmov.com/)
+- [starck-filmes](https://starckfilmes-v26.com/)
+- [rede-torrent](https://redestorrents.com/)
+- [vaca-torrent](https://vaqueirofilmes1.com/)
 
 ## Deploy
 
@@ -28,6 +28,45 @@ docker-compose up -d
 ```
 
 The server will be available at [http://localhost:8080/](http://localhost:8080/).
+
+## Running locally
+
+### Requirements
+
+- [Go](https://go.dev/dl/) 1.24+
+- [Redis](https://redis.io/) (optional, but recommended - it is used as cache and to fetch the seeders/leechers)
+- [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) (optional, only needed by the indexers behind Cloudflare, e.g. `vaca_torrent`)
+
+### Steps
+
+```bash
+# 1. start redis (if installed)
+redis-server
+
+# 2. start flaresolverr (if installed and needed)
+docker run -d --name flaresolverr -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest
+
+# 3. run the indexer
+export REDIS_HOST=localhost
+export FLARESOLVERR_ADDRESS=http://localhost:8191
+export LOG_LEVEL=0 # debug
+go run .
+```
+
+The server will be available at [http://localhost:7006/](http://localhost:7006/) and the
+Prometheus metrics at [http://localhost:8081/metrics](http://localhost:8081/metrics).
+
+Some examples:
+
+```bash
+curl "http://localhost:7006/indexers/starck-filmes?q=moana"
+curl "http://localhost:7006/indexers/rede_torrent?q=moana"
+curl "http://localhost:7006/indexers/vaca_torrent?q=moana"
+```
+
+> **Note:** the `starck-filmes` website rotates its domain every few months
+> (`-v10` -> `-v21` -> `-v26`). The indexer keeps the known domains as fallbacks,
+> but you can also force a specific one with `INDEXER_STARCK_FILMES_URL`.
 
 ## Configuration
 
@@ -59,6 +98,13 @@ You can configure the server using the following environment variables:
 - `MAGNET_METADATA_API_ADDRESS`: (optional) The address of your magnet metadata API. Default: `N/A`
 - `MAGNET_METADATA_API_TIMEOUT_SECONDS`: (optional) The timeout for the magnet metadata API requests in seconds. Default: `10`
 - `INDEXER_<NAME>_URL`: (optional) Set a custom URL for the indexer. Where the "NAME" will be always uppercase indexer key with underscores. ex: `INDEXER_DODO_FILMES_URL=https://my-proxied-dodo-url.org`
+    - Available for the indexers below. The custom URL is always tried first, the
+      known fallback domains are used when it fails.
+    - `INDEXER_STARCK_FILMES_URL`: default `https://starckfilmes-v26.com/`
+    - `INDEXER_REDE_TORRENT_URL`: default `https://redestorrents.com/`
+    - `INDEXER_VACA_TORRENT_URL`: default `https://vaqueirofilmes1.com/`
+- `INDEXER_VACA_TORRENT_SEARCH_URL`: (optional) The search query string used by the `vaca_torrent` indexer. Default: `?q=`
+- `INDEXER_VACA_TORRENT_PAGE_PATTERN`: (optional) The pagination pattern used by the `vaca_torrent` indexer. Default: `pagina/%s/`
 ## Integrating with Jackett
 
 You can integrate this indexer with Jackett by adding a new Torznab custom indexer. Here is an example of how to do it for the `bludv` indexer:

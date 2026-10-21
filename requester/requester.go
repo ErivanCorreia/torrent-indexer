@@ -78,9 +78,11 @@ func (i *Requster) GetDocument(ctx context.Context, url string, referer ...strin
 	resp, err := i.httpClient.Do(req)
 	if err != nil {
 		// try request with flare solverr
-		body, err = i.fs.Get(ctx, url, 3)
-		if err != nil {
-			return nil, fmt.Errorf("failed to do request for url %s: %w", url, err)
+		var fsErr error
+		body, fsErr = i.fs.Get(ctx, url, 3)
+		if fsErr != nil {
+			// keep the original error, it has more information about the failure
+			return nil, fmt.Errorf("failed to do request for url %s: %w (flaresolverr: %v)", url, err, fsErr)
 		}
 	} else {
 		defer resp.Body.Close()
@@ -111,7 +113,7 @@ func (i *Requster) GetDocument(ctx context.Context, url string, referer ...strin
 		// try request with flare solverr
 		body, err = i.fs.Get(ctx, url, 3)
 		if err != nil {
-			return nil, fmt.Errorf("failed to do request for url %s: %w", url, err)
+			return nil, fmt.Errorf("response is a challenge for url %s: %w", url, err)
 		}
 		bodyByte, err = io.ReadAll(body)
 		if err != nil {
@@ -123,15 +125,20 @@ func (i *Requster) GetDocument(ctx context.Context, url string, referer ...strin
 	}
 
 	// save response to cache if it's not a challange, body is not empty and is valid HTML
-	if !hasChallange(bodyByte) && len(bodyByte) > 0 && utils.IsValidHTML(string(bodyByte)) {
-		err = i.c.SetWithExpiration(ctx, key, bodyByte, i.shortLivedCacheExpiration)
-		if err != nil {
-			logging.Error().Err(err).Str("url", url).Msg("Failed to save response to cache")
-		}
-		logging.Debug().Str("url", url).Msg("Saved to cache")
-	} else {
-		return nil, fmt.Errorf("response is a challange")
+	switch {
+	case hasChallange(bodyByte):
+		return nil, fmt.Errorf("response is a challenge for url %s", url)
+	case len(bodyByte) == 0:
+		return nil, fmt.Errorf("empty response for url %s", url)
+	case !utils.IsValidHTML(string(bodyByte)):
+		return nil, fmt.Errorf("response is not a valid HTML document for url %s", url)
 	}
+
+	err = i.c.SetWithExpiration(ctx, key, bodyByte, i.shortLivedCacheExpiration)
+	if err != nil {
+		logging.Error().Err(err).Str("url", url).Msg("Failed to save response to cache")
+	}
+	logging.Debug().Str("url", url).Msg("Saved to cache")
 
 	return io.NopCloser(bytes.NewReader(bodyByte)), nil
 }
