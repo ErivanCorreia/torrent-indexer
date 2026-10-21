@@ -1,14 +1,16 @@
-version: '3'
-
 services:
   torrent-indexer:
-    image: felipemarinho97/torrent-indexer:latest
+    image: erivan/torrent-indexer:latest
     container_name: torrent-indexer
     restart: unless-stopped
     ports:
       - 8080:7006
     networks:
       - indexer
+    # some routers/resolvers return NXDOMAIN for the domains used by the indexers
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - LOG_LEVEL=0 # 0=debug, 1=info, 2=warn, 3=error
       - REDIS_HOST=redis
@@ -22,13 +24,35 @@ services:
       # - MAGNET_METADATA_API_ENABLED=false
       # - MAGNET_METADATA_API_ADDRESS=http://magnet-metadata-api:8080
       # - MAGNET_METADATA_API_TIMEOUT_SECONDS=10
-  
+    depends_on:
+      - redis
+      - flaresolverr
+
   redis:
     image: redis:alpine
     container_name: redis
     restart: unless-stopped
     networks:
       - indexer
+
+  ##### FLARESOLVERR #####
+  ## Needed by the indexers that are behind a Cloudflare challenge
+  ## (bludv and the listing of comando_torrents).
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    ports:
+      - 8191:8191
+    networks:
+      - indexer
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
 
   ##### MEILISEARCH #####
   ## This container is not necessary for the indexer to work,

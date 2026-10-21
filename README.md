@@ -23,11 +23,47 @@ Visit [https://torrent-indexer.darklyn.org/](https://torrent-indexer.darklyn.org
 If you have Docker + docker-compose installed, you can deploy it using the following command:
 
 ```bash
-curl -s https://raw.githubusercontent.com/felipemarinho97/torrent-indexer/main/docker-compose.yml > docker-compose.yml
+curl -s https://raw.githubusercontent.com/ErivanCorreia/torrent-indexer/main/docker-compose.yml > docker-compose.yml
 docker-compose up -d
 ```
 
 The server will be available at [http://localhost:8080/](http://localhost:8080/).
+
+> **Note:** the `docker-compose.yml` of this repository uses the image published
+> by this fork (`erivan/torrent-indexer:latest`). If you prefer to build the
+> image from the sources, use `docker-compose.local.yml` instead (see
+> [Running with Docker Compose](#running-with-docker-compose)).
+
+## Publishing the Docker image
+
+The image is published automatically on every push to `main` (and on every `v*`
+tag) by the [docker-publish.yml](.github/workflows/docker-publish.yml) workflow.
+It is built for `linux/amd64`, `linux/arm64` and `linux/arm/v7` and pushed to
+Docker Hub and to the GitHub Container Registry.
+
+The workflow needs three repository secrets
+(**Settings → Secrets and variables → Actions**):
+
+| Secret | Value |
+| --- | --- |
+| `DOCKER_IMAGE` | `erivan/torrent-indexer` |
+| `DOCKER_USERNAME` | your Docker Hub username |
+| `DOCKER_PASSWORD` | a Docker Hub [access token](https://hub.docker.com/settings/access-tokens) with `Read & Write` permission |
+
+The tags generated are:
+
+- `latest`: the current `main` branch
+- `main`: the current `main` branch
+- `<version>`: the version of the `v*` tag (e.g. `v1.2.3` publishes `1.2.3`)
+- `sha-<short>`: the commit that was built
+
+It is also possible to publish the image manually:
+
+```bash
+docker build -t erivan/torrent-indexer:latest .
+docker login
+docker push erivan/torrent-indexer:latest
+```
 
 ## Running locally
 

@@ -1,0 +1,18 @@
+# Build artifacts
+dist/
+*.exe
+*.test
+*.out
+
+# VCS
+.git/
+.github/
+.gitignore
+
+# Docs & local tooling
+*.md
+!README.md
+docker-compose*.yml
+Makefile
+.vercel/
+.vercel
