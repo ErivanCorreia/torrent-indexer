@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ErivanCorreia/torrent-indexer/logging"
+	"github.com/ErivanCorreia/torrent-indexer/schema"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/felipemarinho97/torrent-indexer/logging"
-	"github.com/felipemarinho97/torrent-indexer/schema"
 )
 
 // getDocument retrieves a document from the cache or makes a request to get it.

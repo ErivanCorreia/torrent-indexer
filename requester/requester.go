@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/felipemarinho97/torrent-indexer/cache"
-	"github.com/felipemarinho97/torrent-indexer/logging"
-	"github.com/felipemarinho97/torrent-indexer/utils"
+	"github.com/ErivanCorreia/torrent-indexer/cache"
+	"github.com/ErivanCorreia/torrent-indexer/logging"
+	"github.com/ErivanCorreia/torrent-indexer/utils"
 	"github.com/fereidani/httpdecompressor"
 )
 
@@ -38,6 +38,10 @@ func NewRequester(fs *FlareSolverr, c *cache.Redis, timeout time.Duration) *Requ
 			IdleConnTimeout:     90 * time.Second, // Keep connections alive longer
 			DisableKeepAlives:   false,            // Enable keep-alive
 			ForceAttemptHTTP2:   true,             // Use HTTP/2 when possible
+			// Respect the HTTP_PROXY/HTTPS_PROXY/NO_PROXY environment variables.
+			// It is useful when the indexer runs behind a corporate proxy or when
+			// the local DNS resolver blocks some of the indexed domains.
+			Proxy: http.ProxyFromEnvironment,
 		},
 	}
 
@@ -141,6 +145,63 @@ func (i *Requster) GetDocument(ctx context.Context, url string, referer ...strin
 	logging.Debug().Str("url", url).Msg("Saved to cache")
 
 	return io.NopCloser(bytes.NewReader(bodyByte)), nil
+}
+
+// GetContent fetches the raw content of a URL.
+//
+// Unlike GetDocument, the response is not required to be an HTML document,
+// which is needed by the indexers that expose a JSON API.
+func (i *Requster) GetContent(ctx context.Context, url string, referer ...string) ([]byte, error) {
+	ref := ""
+	if len(referer) > 0 {
+		ref = referer[0]
+	}
+
+	// try request from short-lived cache
+	key := fmt.Sprintf("%s:%s", cacheKey, url)
+	bodyByte, err := i.c.Get(ctx, key)
+	if err == nil {
+		logging.Debug().Str("url", url).Msg("Returning from short-lived cache")
+		return bodyByte, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request for url %s: %w", url, err)
+	}
+
+	spoofBrowserHeaders(req, ref)
+
+	resp, err := i.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do request for url %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := httpdecompressor.Reader(resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress response: %w", err)
+	}
+	defer body.Close()
+
+	bodyByte, err = io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if len(bodyByte) == 0 {
+		return nil, fmt.Errorf("empty response for url %s", url)
+	}
+
+	logging.Debug().Str("url", url).Msg("Request served from plain client")
+
+	if err := i.c.SetWithExpiration(ctx, key, bodyByte, i.shortLivedCacheExpiration); err != nil {
+		logging.Error().Err(err).Str("url", url).Msg("Failed to save response to cache")
+	} else {
+		logging.Debug().Str("url", url).Msg("Saved to cache")
+	}
+
+	return bodyByte, nil
 }
 
 func (i *Requster) ExpireDocument(ctx context.Context, url string) error {

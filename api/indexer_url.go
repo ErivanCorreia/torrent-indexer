@@ -6,7 +6,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/felipemarinho97/torrent-indexer/logging"
+	"github.com/ErivanCorreia/torrent-indexer/logging"
 )
 
 // candidateURLs returns the ordered list of base URLs that should be tried for

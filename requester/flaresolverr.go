@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felipemarinho97/torrent-indexer/logging"
-	"github.com/felipemarinho97/torrent-indexer/utils"
+	"github.com/ErivanCorreia/torrent-indexer/logging"
+	"github.com/ErivanCorreia/torrent-indexer/utils"
 )
 
 type FlareSolverr struct {
@@ -23,7 +23,9 @@ type FlareSolverr struct {
 	httpClient  *http.Client
 	sessionPool chan string
 	mu          sync.Mutex
+	initMu      sync.Mutex
 	initiated   bool
+	lastAttempt time.Time
 }
 
 var (
@@ -52,12 +54,48 @@ func NewFlareSolverr(url string, timeoutMilli int, poolSize int) *FlareSolverr {
 		return f
 	}
 
-	err := f.FillSessionPool()
-	if err == nil {
-		f.initiated = true
-	}
+	f.ensureAvailable()
 
 	return f
+}
+
+// ensureAvailable checks if the FlareSolverr instance can be used and, when it
+// cannot, tries to connect to it again.
+//
+// The instance may not be ready when the indexer starts (e.g. in a
+// docker-compose stack) or it may restart, so the availability is verified
+// lazily instead of only once during the startup.
+func (f *FlareSolverr) ensureAvailable() bool {
+	if f.url == "" {
+		return false
+	}
+
+	f.initMu.Lock()
+	defer f.initMu.Unlock()
+
+	if f.initiated {
+		return true
+	}
+
+	// avoid hammering the instance when it is down
+	if time.Since(f.lastAttempt) < 5*time.Second {
+		return false
+	}
+	f.lastAttempt = time.Now()
+
+	if err := f.FillSessionPool(); err != nil {
+		logging.Debug().Err(err).Msg("FlareSolverr is still not available")
+		return false
+	}
+
+	if len(f.sessionPool) == 0 {
+		logging.Debug().Msg("FlareSolverr has no session available")
+		return false
+	}
+
+	f.initiated = true
+	logging.Info().Msg("FlareSolverr is available")
+	return true
 }
 
 func (f *FlareSolverr) FillSessionPool() error {
@@ -93,7 +131,10 @@ func (f *FlareSolverr) FillSessionPool() error {
 
 	// If fewer than poolSize sessions were found, create new ones to fill the pool
 	for len(f.sessionPool) < cap(f.sessionPool) {
-		f.CreateSession()
+		if f.CreateSession() == "" {
+			// the session could not be created, do not loop forever
+			return fmt.Errorf("failed to create FlareSolverr session")
+		}
 	}
 
 	return nil
@@ -111,6 +152,7 @@ func (f *FlareSolverr) CreateSession() string {
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/v1", f.url), bytes.NewBuffer(jsonBody))
 	if err != nil {
+		logging.Error().Err(err).Msg("Failed to create the FlareSolverr session request")
 		return ""
 	}
 
@@ -118,6 +160,7 @@ func (f *FlareSolverr) CreateSession() string {
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
+		logging.Error().Err(err).Msg("Failed to reach the FlareSolverr instance")
 		return ""
 	}
 
@@ -126,6 +169,7 @@ func (f *FlareSolverr) CreateSession() string {
 	var sessionResponse map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&sessionResponse)
 	if err != nil {
+		logging.Error().Err(err).Msg("Failed to decode the FlareSolverr session response")
 		return ""
 	}
 
@@ -217,8 +261,9 @@ type Response struct {
 var ErrNotAvailable = fmt.Errorf("flaresolverr is not available")
 
 func (f *FlareSolverr) Get(ctx context.Context, _url string, attempts int) (io.ReadCloser, error) {
-	// Check if the FlareSolverr instance was initiated
-	if !f.initiated {
+	// Check if the FlareSolverr instance is available, trying to connect to it
+	// when it was not ready during the startup
+	if !f.ensureAvailable() {
 		return nil, ErrNotAvailable
 	}
 

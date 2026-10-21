@@ -16,7 +16,7 @@ Visit [https://torrent-indexer.darklyn.org/](https://torrent-indexer.darklyn.org
 - [torrent-dos-filmes](https://torrentdosfilmes.se/)
 - [starck-filmes](https://starckfilmes-v26.com/)
 - [rede-torrent](https://redestorrents.com/)
-- [vaca-torrent](https://vaqueirofilmes1.com/)
+- [vaca-torrent](https://vaqueirofilmes.com/)
 
 ## Deploy
 
@@ -68,6 +68,22 @@ curl "http://localhost:7006/indexers/vaca_torrent?q=moana"
 > (`-v10` -> `-v21` -> `-v26`). The indexer keeps the known domains as fallbacks,
 > but you can also force a specific one with `INDEXER_STARCK_FILMES_URL`.
 
+> **Note about DNS:** some ISPs/routers (192.168.0.1 is a common one) return
+> `NXDOMAIN` for `redestorrents.com` and `vaqueirofilmes1.com`. If an indexer
+> fails with `dial tcp: lookup <domain>: no such host`, the local resolver is
+> the problem, not the indexer. Use a public resolver (the local Docker Compose
+> stack already configures `1.1.1.1`/`8.8.8.8`) or set `HTTPS_PROXY` to a proxy
+> that resolves the domains.
+
+### Running with Docker Compose
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+The stack starts the indexer (port `8080`), Redis and FlareSolverr, and uses
+public DNS so the rotated domains resolve correctly.
+
 ## Configuration
 
 You can configure the server using the following environment variables:
@@ -102,9 +118,17 @@ You can configure the server using the following environment variables:
       known fallback domains are used when it fails.
     - `INDEXER_STARCK_FILMES_URL`: default `https://starckfilmes-v26.com/`
     - `INDEXER_REDE_TORRENT_URL`: default `https://redestorrents.com/`
-    - `INDEXER_VACA_TORRENT_URL`: default `https://vaqueirofilmes1.com/`
-- `INDEXER_VACA_TORRENT_SEARCH_URL`: (optional) The search query string used by the `vaca_torrent` indexer. Default: `?q=`
-- `INDEXER_VACA_TORRENT_PAGE_PATTERN`: (optional) The pagination pattern used by the `vaca_torrent` indexer. Default: `pagina/%s/`
+    - `INDEXER_VACA_TORRENT_URL`: default `https://vaqueirofilmes.com/`
+- `INDEXER_VACA_TORRENT_FALLBACK_URL`: (optional) The fallback domain of the `vaca_torrent` indexer. Default: `https://vaqueirofilmes1.com/`
+- `INDEXER_VACA_TORRENT_SEARCH_URL`: (optional) The search query string used by the `vaca_torrent` indexer. It points to the JSON API that the website uses on its own search box. Default: `wp-admin/admin-ajax.php?action=search_posts&lang=pt-BR&s=`
+- `INDEXER_VACA_TORRENT_PAGE_PATTERN`: (optional) The pagination pattern used by the `vaca_torrent` indexer. Default: `pt/page/%s/`
+- `INDEXER_VACA_TORRENT_CATALOG_PATH`: (optional) The path of the catalog page of the `vaca_torrent` indexer. Default: `pt/`
+
+> **Note about `vaca_torrent`:** the website now serves the magnet links through a
+> redirect that is protected by an advertisement gate, the magnet is only
+> released after the advertisement is opened. The indexer detects the gate and
+> skips those links, so it currently returns `0` results. Bypassing the
+> advertisement gate is not implemented on purpose.
 ## Integrating with Jackett
 
 You can integrate this indexer with Jackett by adding a new Torznab custom indexer. Here is an example of how to do it for the `bludv` indexer:

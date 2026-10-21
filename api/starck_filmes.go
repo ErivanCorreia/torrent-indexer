@@ -11,11 +11,11 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/felipemarinho97/torrent-indexer/logging"
-	"github.com/felipemarinho97/torrent-indexer/magnet"
-	"github.com/felipemarinho97/torrent-indexer/schema"
-	goscrape "github.com/felipemarinho97/torrent-indexer/scrape"
-	"github.com/felipemarinho97/torrent-indexer/utils"
+	"github.com/ErivanCorreia/torrent-indexer/logging"
+	"github.com/ErivanCorreia/torrent-indexer/magnet"
+	"github.com/ErivanCorreia/torrent-indexer/schema"
+	goscrape "github.com/ErivanCorreia/torrent-indexer/scrape"
+	"github.com/ErivanCorreia/torrent-indexer/utils"
 )
 
 var starck_filmes = IndexerMeta{

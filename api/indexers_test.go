@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ErivanCorreia/torrent-indexer/schema"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/felipemarinho97/torrent-indexer/schema"
 )
 
 // loadFixture loads an HTML fixture from the testdata folder.
@@ -301,8 +301,16 @@ func TestRedeTorrentRowAudio(t *testing.T) {
 //
 
 func TestVacaTorrentDefaultURL(t *testing.T) {
-	if !strings.Contains(vacaTorrent.URL, "vaqueirofilmes") {
-		t.Errorf("vacaTorrent.URL = %q, expected the vaqueirofilmes domain", vacaTorrent.URL)
+	if !strings.Contains(vacaTorrent.URL, "vaqueirofilmes.com") {
+		t.Errorf("vacaTorrent.URL = %q, expected the vaqueirofilmes.com domain", vacaTorrent.URL)
+	}
+
+	if len(vacaTorrent.FallbackURLs) == 0 {
+		t.Fatal("vacaTorrent.FallbackURLs is empty, expected the old domain as fallback")
+	}
+
+	if !strings.Contains(vacaTorrent.FallbackURLs[0], "vaqueirofilmes1.com") {
+		t.Errorf("vacaTorrent.FallbackURLs[0] = %q, expected the vaqueirofilmes1.com domain", vacaTorrent.FallbackURLs[0])
 	}
 }
 
@@ -315,21 +323,21 @@ func TestVacaTorrentBuildURL(t *testing.T) {
 		want string
 	}{
 		{
-			name: "should build the home URL",
-			base: "https://vaqueirofilmes1.com/",
-			want: "https://vaqueirofilmes1.com/",
+			name: "should build the catalog URL",
+			base: "https://vaqueirofilmes.com/",
+			want: "https://vaqueirofilmes.com/pt/",
 		},
 		{
 			name: "should build the pagination URL",
-			base: "https://vaqueirofilmes1.com/",
+			base: "https://vaqueirofilmes.com/",
 			page: "2",
-			want: "https://vaqueirofilmes1.com/pagina/2/",
+			want: "https://vaqueirofilmes.com/pt/page/2/",
 		},
 		{
 			name: "should build the search URL",
-			base: "https://vaqueirofilmes1.com/",
+			base: "https://vaqueirofilmes.com/",
 			q:    "moana",
-			want: "https://vaqueirofilmes1.com/?q=moana",
+			want: "https://vaqueirofilmes.com/wp-admin/admin-ajax.php?action=search_posts&lang=pt-BR&s=moana",
 		},
 	}
 
@@ -342,34 +350,88 @@ func TestVacaTorrentBuildURL(t *testing.T) {
 	}
 }
 
-func TestVacaTorrentParseDetails(t *testing.T) {
-	doc := loadFixture(t, "vaca_template.html")
+func TestVacaTorrentExtractLinks(t *testing.T) {
+	doc := loadFixture(t, "vaca_listing.html")
 
-	details := parseVacaTorrentDetails(doc)
+	links := extractVacaTorrentLinks(doc)
 
-	if details.Title != "Homem-Aranha: Um Novo Dia" {
-		t.Errorf("Title = %q, want %q", details.Title, "Homem-Aranha: Um Novo Dia")
+	if len(links) == 0 {
+		t.Fatal("extractVacaTorrentLinks() returned no links")
 	}
 
-	if details.OriginalTitle != "Spider-Man: A New Day (2026)" {
-		t.Errorf("OriginalTitle = %q, want %q", details.OriginalTitle, "Spider-Man: A New Day (2026)")
+	found := false
+	for _, link := range links {
+		if link == "https://vaqueirofilmes.com/pt/movie/codigo-vinganca/" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("extractVacaTorrentLinks() = %v, expected the movie link to be present", links[:1])
+	}
+}
+
+func TestVacaTorrentParseDetails(t *testing.T) {
+	doc := loadFixture(t, "vaca_movie.html")
+
+	details := parseVacaTorrentDetails(doc, "https://vaqueirofilmes.com/pt/movie/codigo-vinganca/")
+
+	if details.Title != "Código: Vingança" {
+		t.Errorf("Title = %q, want %q", details.Title, "Código: Vingança")
 	}
 
 	if details.Year != "2026" {
 		t.Errorf("Year = %q, want %q", details.Year, "2026")
 	}
 
-	if len(details.Entries) != 6 {
-		t.Errorf("len(Entries) = %d, want 6", len(details.Entries))
+	if details.IMDB != "https://www.imdb.com/title/tt32338669/" {
+		t.Errorf("IMDB = %q, want %q", details.IMDB, "https://www.imdb.com/title/tt32338669/")
 	}
 
-	for _, entry := range details.Entries {
+	if details.LinksPage != "https://vaqueirofilmes.com/movie-links/44424/" {
+		t.Errorf("LinksPage = %q, want %q", details.LinksPage, "https://vaqueirofilmes.com/movie-links/44424/")
+	}
+}
+
+func TestVacaTorrentParseDownloads(t *testing.T) {
+	doc := loadFixture(t, "vaca_links.html")
+
+	entries := extractVacaMagnetEntries(doc, nil)
+
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2", len(entries))
+	}
+
+	for _, entry := range entries {
 		if entry.Size == "" {
-			t.Error("Entry.Size is empty, expected the file size")
+			t.Errorf("Entry.Size is empty, expected the file size, row = %q", entry.Row)
 		}
 		if entry.Qual == "" {
-			t.Error("Entry.Qual is empty, expected the quality")
+			t.Errorf("Entry.Qual is empty, expected the quality, row = %q", entry.Row)
 		}
+		if len(entry.Audio) == 0 {
+			t.Errorf("Entry.Audio is empty, expected the audio languages, row = %q", entry.Row)
+		}
+		if !strings.HasPrefix(entry.Link, "https://systemtech.space/") {
+			t.Errorf("Entry.Link = %q, expected the download link", entry.Link)
+		}
+	}
+
+	if entries[0].Size != "1.90 GB" {
+		t.Errorf("entries[0].Size = %q, want %q", entries[0].Size, "1.90 GB")
+	}
+
+	if entries[0].Qual != "1080p" {
+		t.Errorf("entries[0].Qual = %q, want %q", entries[0].Qual, "1080p")
+	}
+
+	if entries[1].Qual != "2160p" {
+		t.Errorf("entries[1].Qual = %q, want %q", entries[1].Qual, "2160p")
+	}
+
+	if len(entries[0].Subs) != 1 || entries[0].Subs[0] != "PT-BR" {
+		t.Errorf("entries[0].Subs = %v, want [PT-BR]", entries[0].Subs)
 	}
 }
 
