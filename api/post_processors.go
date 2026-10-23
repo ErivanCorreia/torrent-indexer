@@ -22,30 +22,6 @@ func CleanupTitleWebsites(_ *Indexer, _ *http.Request, torrents []schema.Indexed
 	return torrents
 }
 
-func AppendAudioTags(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
-	for i, it := range torrents {
-		// skip if title is empty
-		if it.Title == "" {
-			continue
-		}
-		// reprocess audio tags in case any middleware has changed the title
-		torrents[i].Audio = getAudioFromTitle(it.Title, it.Audio)
-
-		// for each video file, get audio ISO639-2 code and append to title
-		for _, file := range it.Files {
-			// check if file is a video
-			if !utils.IsVideoFile(file.Path) {
-				continue
-			}
-			torrents[i].Audio = getAudioFromTitle(file.Path, torrents[i].Audio)
-		}
-
-		torrents[i].Title = appendAudioISO639_2Code(torrents[i].Title, torrents[i].Audio)
-	}
-
-	return torrents
-}
-
 // AppendYearToTitle appends the year to the title when it is not already present.
 // Example: "Coraline" with year "2009" becomes "Coraline (2009)".
 func AppendYearToTitle(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {

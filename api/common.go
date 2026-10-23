@@ -259,21 +259,6 @@ func getIMDBLinkFromDocument(doc *goquery.Document) string {
 	return imdbLink
 }
 
-// appendAudioISO639_2Code appends the audio languages to the title in ISO 639-2 code format.
-// It formats the title to include the audio languages in parentheses.
-// Example: "Movie Title (eng, por)"
-func appendAudioISO639_2Code(title string, a []schema.Audio) string {
-	if len(a) > 0 {
-		audio := []string{}
-		for _, lang := range a {
-			audio = append(audio, lang.String())
-		}
-		audio = slices.Compact(audio)
-		title = fmt.Sprintf("%s (%s)", title, strings.Join(audio, ", "))
-	}
-	return title
-}
-
 // getAudioFromTitle extracts audio languages from the release title.
 // It checks for common patterns like "nacional", "dual", or "dublado"
 func getAudioFromTitle(releaseTitle string, audioFromContent []schema.Audio) []schema.Audio {

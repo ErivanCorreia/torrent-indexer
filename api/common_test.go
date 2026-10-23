@@ -291,51 +291,6 @@ func Test_getAudioFromTitle(t *testing.T) {
 	}
 }
 
-func Test_appendAudioISO639_2Code(t *testing.T) {
-	tests := []struct {
-		name  string
-		title string
-		a     []schema.Audio
-		want  string
-	}{
-		{
-			name:  "should append audio in title",
-			title: "Movie Title",
-			a: []schema.Audio{
-				schema.AudioPortuguese,
-				schema.AudioEnglish,
-			},
-			want: "Movie Title (brazilian, eng)",
-		},
-		{
-			name:  "should append audio in title and deduplicate",
-			title: "Movie Title",
-			a: []schema.Audio{
-				schema.AudioPortuguese,
-				schema.AudioPortuguese2,
-				schema.AudioEnglish,
-				schema.AudioEnglish2,
-			},
-			want: "Movie Title (brazilian, eng)",
-		},
-		{
-			name:  "should not append empty audio",
-			title: "Movie Title",
-			a:     []schema.Audio{},
-			want:  "Movie Title",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := appendAudioISO639_2Code(tt.title, tt.a)
-
-			if got != tt.want {
-				t.Errorf("appendAudioISO639_2Code() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_appendYearToTitle(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -362,10 +317,10 @@ func Test_appendYearToTitle(t *testing.T) {
 			want:  "Coraline 2009",
 		},
 		{
-			name:  "should append the year after the audio tags",
-			title: "Coraline (brazilian)",
+			name:  "should append the year after the release title",
+			title: "Coraline WEB-DL 1080p",
 			year:  "2009",
-			want:  "Coraline (brazilian) (2009)",
+			want:  "Coraline WEB-DL 1080p (2009)",
 		},
 		{
 			name:  "should keep the title when the year is empty",

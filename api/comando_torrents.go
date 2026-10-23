@@ -212,7 +212,7 @@ func getTorrents(ctx context.Context, i *Indexer, link, referer string) ([]schem
 				logging.Error().Err(err).Str("info_hash", infoHash).Msg("Failed to get leechers and seeders")
 			}
 
-			title := processTitle(title, magnetAudio)
+			title := processTitle(title)
 
 			// if the number of sizes is equal to the number of magnets, then assign the size to each indexed torrent in order
 			var mySize string
@@ -273,15 +273,12 @@ func parseLocalizedDate(datePublished string) (time.Time, error) {
 	return time.Time{}, nil
 }
 
-func processTitle(title string, a []schema.Audio) string {
+func processTitle(title string) string {
 	// remove ' - Donwload' from title
 	title = strings.Replace(title, " – Download", "", -1)
 
 	// remove 'comando.la' from title
 	title = strings.Replace(title, "comando.la", "", -1)
 
-	// add audio ISO 639-2 code to title between ()
-	title = appendAudioISO639_2Code(title, a)
-
-	return title
+	return strings.TrimSpace(title)
 }

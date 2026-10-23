@@ -263,7 +263,7 @@ func getTorrentStarckFilmes(ctx context.Context, i *Indexer, link, referer strin
 				logging.Error().Err(err).Str("info_hash", infoHash).Msg("Failed to get leechers and seeders")
 			}
 
-			title := processTitle(title, magnetAudio)
+			title := processTitle(title)
 
 			// if the number of sizes is equal to the number of magnets, then assign the size to each indexed torrent in order
 			var mySize string

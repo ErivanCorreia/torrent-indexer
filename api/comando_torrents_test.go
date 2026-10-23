@@ -6,6 +6,37 @@ import (
 	"time"
 )
 
+func Test_processTitle(t *testing.T) {
+	tests := []struct {
+		name  string
+		title string
+		want  string
+	}{
+		{
+			name:  "should remove the download suffix",
+			title: "Moana – Download",
+			want:  "Moana",
+		},
+		{
+			name:  "should remove the website name",
+			title: "Moana comando.la",
+			want:  "Moana",
+		},
+		{
+			name:  "should keep the release title as is",
+			title: "Moana.2026.WEB-DL.1080p.DUAL.5.1",
+			want:  "Moana.2026.WEB-DL.1080p.DUAL.5.1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := processTitle(tt.title); got != tt.want {
+				t.Errorf("processTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_parseLocalizedDate(t *testing.T) {
 	type args struct {
 		datePublished string

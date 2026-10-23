@@ -82,10 +82,10 @@ func (i *Indexer) HandlerManualIndexer(w http.ResponseWriter, r *http.Request) {
 			logging.ErrorWithRequest(r).Err(err).Str("info_hash", infoHash).Msg("Failed to get peers and seeds")
 		}
 
-		title := processTitle(releaseTitle, magnetAudio)
+		title := processTitle(releaseTitle)
 
 		ixt := schema.IndexedTorrent{
-			Title:         appendAudioISO639_2Code(releaseTitle, magnetAudio),
+			Title:         releaseTitle,
 			OriginalTitle: title,
 			Audio:         magnetAudio,
 			MagnetLink:    req.MagnetLink,

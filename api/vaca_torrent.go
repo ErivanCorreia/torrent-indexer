@@ -644,7 +644,7 @@ func getTorrentsVacaTorrent(ctx context.Context, i *Indexer, link string) ([]sch
 				logging.Error().Err(err).Str("info_hash", infoHash).Msg("Failed to get leechers and seeders")
 			}
 
-			processedTitle := processVacaTorrentTitle(title, magnetAudio, "")
+			processedTitle := processVacaTorrentTitle(title, "")
 
 			mySize := entry.Size
 			if mySize == "" {
@@ -688,7 +688,7 @@ func getTorrentsVacaTorrent(ctx context.Context, i *Indexer, link string) ([]sch
 	return indexedTorrents, nil
 }
 
-func processVacaTorrentTitle(title string, audio []schema.Audio, season string) string {
+func processVacaTorrentTitle(title string, season string) string {
 	// Remove common suffixes
 	title = strings.Replace(title, " – Download", "", -1)
 	title = strings.Replace(title, " - Download", "", -1)
@@ -698,9 +698,6 @@ func processVacaTorrentTitle(title string, audio []schema.Audio, season string) 
 	if season != "" {
 		title = fmt.Sprintf("%s S%s - %sª Temporada", title, fmt.Sprintf("%02s", season), season)
 	}
-
-	// Add audio ISO 639-2 code to title between ()
-	title = appendAudioISO639_2Code(title, audio)
 
 	return title
 }
