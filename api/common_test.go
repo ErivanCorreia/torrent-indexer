@@ -336,6 +336,65 @@ func Test_appendAudioISO639_2Code(t *testing.T) {
 	}
 }
 
+func Test_appendYearToTitle(t *testing.T) {
+	tests := []struct {
+		name  string
+		title string
+		year  string
+		want  string
+	}{
+		{
+			name:  "should append the year to the title",
+			title: "Coraline",
+			year:  "2009",
+			want:  "Coraline (2009)",
+		},
+		{
+			name:  "should not append the year when it is already in the title",
+			title: "Coraline (2009)",
+			year:  "2009",
+			want:  "Coraline (2009)",
+		},
+		{
+			name:  "should not append the year when it is already in the title without parentheses",
+			title: "Coraline 2009",
+			year:  "2009",
+			want:  "Coraline 2009",
+		},
+		{
+			name:  "should append the year after the audio tags",
+			title: "Coraline (brazilian)",
+			year:  "2009",
+			want:  "Coraline (brazilian) (2009)",
+		},
+		{
+			name:  "should keep the title when the year is empty",
+			title: "Coraline",
+			year:  "",
+			want:  "Coraline",
+		},
+		{
+			name:  "should keep the title when the year is invalid",
+			title: "Coraline",
+			year:  "unknown",
+			want:  "Coraline",
+		},
+		{
+			name:  "should keep the empty title",
+			title: "",
+			year:  "2009",
+			want:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := appendYearToTitle(tt.title, tt.year); got != tt.want {
+				t.Errorf("appendYearToTitle() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_findYearFromText(t *testing.T) {
 	tests := []struct {
 		name  string

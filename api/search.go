@@ -65,6 +65,11 @@ func (h *MeilisearchHandler) SearchTorrentHandler(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Keep the title format consistent with the indexers endpoints.
+	for i := range results {
+		results[i].Title = appendYearToTitle(results[i].Title, results[i].Year)
+	}
+
 	// Format response to match indexers structure
 	response := map[string]interface{}{
 		"results": results,

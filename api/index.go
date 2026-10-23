@@ -46,6 +46,7 @@ var GlobalPostProcessors = []PostProcessorFunc{
 	CleanupTitleWebsites,   // Remove website names from titles
 	FallbackPostTitle,      // Fallback to original title if empty
 	AppendAudioTags,        // Add (brazilian, eng, etc.) audio tags to titles
+	AppendYearToTitle,      // Add the year to the end of the title, e.g. "Coraline (2009)"
 	ApplySorting,           // Sort results based on sortBy and sortDirection params
 	SendToSearchIndexer,    // Send indexed torrents to Meilisearch
 	FilterBy,               // Filter results based on query params (audio, etc.)

@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,6 +44,33 @@ func AppendAudioTags(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorre
 	}
 
 	return torrents
+}
+
+// AppendYearToTitle appends the year to the title when it is not already present.
+// Example: "Coraline" with year "2009" becomes "Coraline (2009)".
+func AppendYearToTitle(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
+	for i := range torrents {
+		torrents[i].Title = appendYearToTitle(torrents[i].Title, torrents[i].Year)
+	}
+	return torrents
+}
+
+var yearRE = regexp.MustCompile(`^\d{4}$`)
+
+func appendYearToTitle(title, year string) string {
+	title = strings.TrimSpace(title)
+	year = strings.TrimSpace(year)
+
+	if title == "" || !yearRE.MatchString(year) {
+		return title
+	}
+
+	// the year is already part of the title, e.g. "Coraline (2009)"
+	if strings.Contains(title, year) {
+		return title
+	}
+
+	return fmt.Sprintf("%s (%s)", title, year)
 }
 
 // SendToSearchIndexer sends the indexed torrents to the search indexer
