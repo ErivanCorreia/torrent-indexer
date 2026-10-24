@@ -96,12 +96,41 @@ func (i *Indexer) HandlerStarckFilmesIndexer(w http.ResponseWriter, r *http.Requ
 		},
 	)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		err = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		if err != nil {
-			logging.ErrorWithRequest(r).Err(err).Msg("Failed to encode error response")
+		// If it's a search query with no results, treat as empty results instead of error
+		if q != "" {
+			// Try to fetch any valid page to confirm it's a real page (not network error)
+			for _, baseURL := range candidateURLs(metadata) {
+				testURL := buildStarckURL(baseURL, q, page)
+				doc, ferr := i.fetchDocument(ctx, testURL)
+				if ferr == nil {
+					links = extractStarckLinks(doc)
+					targetURL = testURL
+					err = nil
+					break
+				}
+			}
 		}
-		i.metrics.IndexerErrors.WithLabelValues(metadata.Label).Inc()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			err = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			if err != nil {
+				logging.ErrorWithRequest(r).Err(err).Msg("Failed to encode error response")
+			}
+			i.metrics.IndexerErrors.WithLabelValues(metadata.Label).Inc()
+			return
+		}
+	}
+
+	if targetURL == "" {
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(Response{
+			Results:      []schema.IndexedTorrent{},
+			Count:        0,
+			IndexedCount: 0,
+		})
+		if err != nil {
+			logging.Error().Err(err).Msg("Failed to encode response")
+		}
 		return
 	}
 

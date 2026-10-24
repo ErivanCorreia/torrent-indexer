@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -59,6 +60,8 @@ func (i *Indexer) fetchFirstMatchingURL(
 	match func(doc *goquery.Document) bool,
 ) (string, *goquery.Document, error) {
 	var lastErr error
+	var lastDoc *goquery.Document
+	var lastURL string
 
 	for _, baseURL := range baseURLs {
 		targetURL := buildURL(baseURL)
@@ -74,6 +77,8 @@ func (i *Indexer) fetchFirstMatchingURL(
 
 		if match != nil && !match(doc) {
 			lastErr = fmt.Errorf("no results found at %s", targetURL)
+			lastDoc = doc
+			lastURL = targetURL
 			logging.Warn().
 				Str("url", targetURL).
 				Msg("No results found, trying the next candidate URL")
@@ -81,6 +86,12 @@ func (i *Indexer) fetchFirstMatchingURL(
 		}
 
 		return targetURL, doc, nil
+	}
+
+	// If all candidates failed only because of "no results" (page loaded but empty),
+	// return the last document so the caller can return 200 with empty results.
+	if lastDoc != nil && lastErr != nil && strings.Contains(lastErr.Error(), "no results found") {
+		return lastURL, lastDoc, nil
 	}
 
 	if lastErr == nil {
