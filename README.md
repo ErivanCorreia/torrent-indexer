@@ -165,6 +165,28 @@ You can configure the server using the following environment variables:
 > released after the advertisement is opened. The indexer detects the gate and
 > skips those links, so it currently returns `0` results. Bypassing the
 > advertisement gate is not implemented on purpose.
+
+### Title handling
+
+The `title` field is the torrent release name, because that is what Prowlarr
+parses to identify quality, source, codec, audio and season/episode before
+sending the result to Sonarr/Radarr. The `original_title` field keeps the clean,
+human-readable page title (used as the Prowlarr description).
+
+The post-processors sanitize the magnet display name (`dn`), removing known and
+generic adware domains. A display name that starts with quality tokens, contains
+only technical tokens, or is truncated is discarded and rebuilt from the page
+title plus the technical tokens found in the magnet, for example:
+
+```text
+Moana (2026) 1080p WEB-DL x264 DUBLADO DUAL 5.1
+```
+
+When the magnet metadata API is enabled, its name (the real torrent name from
+the torrent's info dictionary) is preferred over the magnet display name. If no
+usable title or page title exists, the `FALLBACK_TITLE_ENABLED` policy described
+above is applied.
+
 ## Integrating with Jackett
 
 You can integrate this indexer with Jackett by adding a new Torznab custom indexer. Here is an example of how to do it for the `bludv` indexer:

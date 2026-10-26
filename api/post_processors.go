@@ -14,10 +14,13 @@ import (
 	"github.com/hbollon/go-edlib"
 )
 
-// CleanupTitleWebsites removes unwanted characters from the title
+// CleanupTitleWebsites removes website names from the release title and from
+// the page title. Release names are sanitized more thoroughly later by
+// NormalizeTitles.
 func CleanupTitleWebsites(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
 	for i := range torrents {
-		torrents[i].Title = utils.RemoveKnownWebsites(torrents[i].Title)
+		torrents[i].Title = utils.RemoveWebsiteReferences(torrents[i].Title)
+		torrents[i].OriginalTitle = utils.RemoveWebsiteReferences(torrents[i].OriginalTitle)
 	}
 	return torrents
 }
@@ -57,16 +60,24 @@ func SendToSearchIndexer(i *Indexer, _ *http.Request, torrents []schema.IndexedT
 	return torrents
 }
 
-// FullfilMissingMetadata fills in missing metadata for indexed torrents
+// FullfilMissingMetadata fills in missing metadata for indexed torrents.
+//
+// The name returned by the metadata API is the real torrent name (it comes
+// from the torrent's info dictionary), so it is preferred over the magnet
+// display name whenever it is usable.
 func FullfilMissingMetadata(i *Indexer, r *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
 	if !i.magnetMetadataAPI.IsEnabled() {
 		return torrents
 	}
 
 	return utils.ParallelFlatMap(torrents, func(it schema.IndexedTorrent) ([]schema.IndexedTorrent, error) {
-		if it.Size != "" && it.Title != "" && it.OriginalTitle != "" {
+		needsSize := it.Size == ""
+		needsTitle := !isUsableReleaseTitle(sanitizeReleaseTitle(it.Title), it.OriginalTitle)
+		needsOriginalTitle := it.OriginalTitle == ""
+		if !needsSize && !needsTitle && !needsOriginalTitle {
 			return []schema.IndexedTorrent{it}, nil
 		}
+
 		m, err := i.magnetMetadataAPI.FetchMetadata(r.Context(), it.MagnetLink)
 		if err != nil {
 			return []schema.IndexedTorrent{it}, nil
@@ -75,17 +86,21 @@ func FullfilMissingMetadata(i *Indexer, r *http.Request, torrents []schema.Index
 		// convert size in bytes to a human-readable format
 		it.Size = utils.FormatBytes(m.Size)
 
-		// Use name from metadata if available as it is more accurate
-		if m.Name != "" {
-			it.Title = m.Name
+		// Use the metadata name when it is a valid release name. If the
+		// current title is empty, keep it even when the heuristic rejects it:
+		// NormalizeTitles will rebuild it from the page title.
+		if name := sanitizeReleaseTitle(m.Name); name != "" {
+			if isUsableReleaseTitle(name, it.OriginalTitle) || strings.TrimSpace(it.Title) == "" {
+				it.Title = name
+			}
 		}
 		logging.Debug().Str("info_hash", m.InfoHash).Str("size", it.Size).Msg("Retrieved metadata from MagnetMetadataAPI")
 
 		// If files are present, add them to the indexed torrent
 		if len(m.Files) > 0 {
 			it.Files = make([]schema.File, len(m.Files))
-			for i, file := range m.Files {
-				it.Files[i] = schema.File{
+			for fileIdx, file := range m.Files {
+				it.Files[fileIdx] = schema.File{
 					Path: file.Path,
 					Size: utils.FormatBytes(file.Size),
 				}
@@ -101,13 +116,51 @@ func FullfilMissingMetadata(i *Indexer, r *http.Request, torrents []schema.Index
 	})
 }
 
+// NormalizeTitles sanitizes the release name and rebuilds it when the magnet
+// display name is polluted (adware-prefixed, technical-only, truncated, etc.).
+//
+// The title field is kept as a release name that Prowlarr/Sonarr/Radarr can
+// parse: "<title> (<year>) <episode> <quality> <source> <codec> <hdr> <audio>".
+// The original_title field keeps the clean, human-readable page title.
+func NormalizeTitles(_ *Indexer, _ *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
+	for i := range torrents {
+		torrents[i].OriginalTitle = sanitizeDisplayTitle(torrents[i].OriginalTitle)
+
+		rawTitle := strings.TrimSpace(torrents[i].Title)
+		if rawTitle == "" {
+			// Let FallbackPostTitle apply the configured policy for empty
+			// titles.
+			continue
+		}
+
+		releaseTitle := sanitizeReleaseTitle(rawTitle)
+		if !isUsableReleaseTitle(releaseTitle, torrents[i].OriginalTitle) {
+			releaseTitle = buildReleaseTitle(
+				torrents[i].OriginalTitle,
+				torrents[i].Year,
+				releaseTitle,
+				torrents[i].Audio,
+			)
+		}
+
+		torrents[i].Title = releaseTitle
+	}
+	return torrents
+}
+
 func FallbackPostTitle(i *Indexer, r *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
 	emptyTitles := 0
 
 	for idx := range torrents {
+		torrents[idx].Title = strings.TrimSpace(torrents[idx].Title)
 		if torrents[idx].Title == "" {
+			originalTitle := sanitizeDisplayTitle(torrents[idx].OriginalTitle)
+			if originalTitle == "" {
+				emptyTitles++
+				continue
+			}
 			if i.config.FallbackTitleEnabled {
-				torrents[idx].Title = fmt.Sprintf("[UNSAFE] %s", torrents[idx].OriginalTitle)
+				torrents[idx].Title = fmt.Sprintf("[UNSAFE] %s", originalTitle)
 			} else {
 				emptyTitles++
 			}
@@ -123,14 +176,13 @@ func FallbackPostTitle(i *Indexer, r *http.Request, torrents []schema.IndexedTor
 	return torrents
 }
 
-func AddSimilarityCheck(i *Indexer, r *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
-	q := r.URL.Query().Get("q")
+func AddSimilarityCheck(_ *Indexer, r *http.Request, torrents []schema.IndexedTorrent) []schema.IndexedTorrent {
+	q := normalizeTitleForMatch(r.URL.Query().Get("q"))
 
 	for i, it := range torrents {
-		jLower := strings.ReplaceAll(strings.ToLower(fmt.Sprintf("%s %s", it.Title, it.OriginalTitle)), ".", " ")
-		qLower := strings.ToLower(q)
+		title := normalizeTitleForMatch(fmt.Sprintf("%s %s", it.Title, it.OriginalTitle))
 		splitLength := 2
-		torrents[i].Similarity = edlib.JaccardSimilarity(jLower, qLower, splitLength)
+		torrents[i].Similarity = edlib.JaccardSimilarity(title, q, splitLength)
 	}
 
 	// remove the ones with zero similarity

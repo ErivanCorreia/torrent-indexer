@@ -72,17 +72,20 @@ func (i *Indexer) HandlerManualIndexer(w http.ResponseWriter, r *http.Request) {
 			logging.ErrorWithRequest(r).Err(err).Str("magnet_link", req.MagnetLink).Msg("Failed to parse magnet link")
 		}
 		var audio []schema.Audio
-		releaseTitle := magnet.DisplayName
+		releaseTitle := sanitizeReleaseTitle(magnet.DisplayName)
 		infoHash := magnet.InfoHash.String()
 		trackers := magnet.Trackers
-		magnetAudio := getAudioFromTitle(releaseTitle, audio)
+		magnetAudio := getAudioFromTitle(magnet.DisplayName, audio)
 
 		peer, seed, err := goscrape.GetLeechsAndSeeds(ctx, i.redis, i.metrics, infoHash, trackers)
 		if err != nil {
 			logging.ErrorWithRequest(r).Err(err).Str("info_hash", infoHash).Msg("Failed to get peers and seeds")
 		}
 
-		title := processTitle(releaseTitle)
+		title := sanitizeDisplayTitle(processTitle(magnet.DisplayName))
+		if title != "" && !isUsableReleaseTitle(releaseTitle, title) {
+			releaseTitle = buildReleaseTitle(title, "", releaseTitle, magnetAudio)
+		}
 
 		ixt := schema.IndexedTorrent{
 			Title:         releaseTitle,

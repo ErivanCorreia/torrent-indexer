@@ -41,11 +41,12 @@ type Response struct {
 type PostProcessorFunc func(*Indexer, *http.Request, []schema.IndexedTorrent) []schema.IndexedTorrent
 
 var GlobalPostProcessors = []PostProcessorFunc{
-	AddSimilarityCheck,     // Jaccard similarity
-	FullfilMissingMetadata, // Fill missing size or title metadata
 	CleanupTitleWebsites,   // Remove website names from titles
+	FullfilMissingMetadata, // Fill missing size or title metadata (best title source)
+	NormalizeTitles,        // Sanitize/validate the release name and build a fallback
 	FallbackPostTitle,      // Fallback to original title if empty
-	AppendYearToTitle,      // Add the year to the end of the title, e.g. "Coraline (2009)"
+	AppendYearToTitle,      // Add the year to the title, e.g. "Coraline (2009)"
+	AddSimilarityCheck,     // Jaccard similarity, computed on the final clean titles
 	ApplySorting,           // Sort results based on sortBy and sortDirection params
 	SendToSearchIndexer,    // Send indexed torrents to Meilisearch
 	FilterBy,               // Filter results based on query params (audio, etc.)
