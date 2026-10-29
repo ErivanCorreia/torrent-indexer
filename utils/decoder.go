@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html"
+	"strings"
 )
 
 func DecodeAdLink(encodedStr string) (string, error) {
@@ -73,22 +74,79 @@ func unshuffleStringByStep(shuffled string, step int) (string, error) {
 	return string(original), nil
 }
 
-// DecodeStarckDataU decodes the obfuscated magnet link from the data-u attribute. This is indexer-specific.
+// DecodeStarckDataU decodes the obfuscated magnet link from the data-u
+// attribute. This is indexer-specific and kept for the legacy page layout.
 func DecodeStarckDataU(dataU string) (string, error) {
 	if dataU == "" {
 		return "", fmt.Errorf("empty data-u value")
 	}
 
-	unshuffled, err := unshuffleStringByStep(dataU, 3)
+	return decodeStarckObfuscatedString(dataU)
+}
+
+// DecodeStarckXID decodes the obfuscated magnet link from the "xid" query
+// parameter used by the current download buttons (e.g.
+// https://filmedl.com/?xid=...).
+//
+// In this layout the site shuffles the characters of the base64-encoded magnet
+// URI, while the legacy data-u attribute contained the shuffled magnet URI
+// itself. Both forms are supported.
+func DecodeStarckXID(xid string) (string, error) {
+	if xid == "" {
+		return "", fmt.Errorf("empty xid value")
+	}
+
+	return decodeStarckObfuscatedString(xid)
+}
+
+// decodeStarckObfuscatedString reverses the character shuffle and, when
+// needed, the base64 layer applied by starck-filmes to its magnet links.
+func decodeStarckObfuscatedString(encoded string) (string, error) {
+	unshuffled, err := unshuffleStringByStep(encoded, 3)
 	if err != nil {
 		return "", fmt.Errorf("unshuffle failed: %w", err)
 	}
 
-	if !IsMagnetLink(unshuffled) {
-		return "", fmt.Errorf("decoded string is not a valid magnet link: %s", unshuffled)
+	// Legacy layout: the unshuffled value is the magnet URI itself.
+	if IsMagnetLink(unshuffled) {
+		return unshuffled, nil
 	}
 
-	return unshuffled, nil
+	// Current layout: the unshuffled value is a base64-encoded magnet URI.
+	decoded, err := decodeBase64String(unshuffled)
+	if err != nil {
+		return "", fmt.Errorf("base64 decode failed: %w", err)
+	}
+
+	if !IsMagnetLink(decoded) {
+		return "", fmt.Errorf("decoded string is not a valid magnet link: %s", decoded)
+	}
+
+	return decoded, nil
+}
+
+// decodeBase64String decodes both padded and unpadded base64 values.
+func decodeBase64String(value string) (string, error) {
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {
+		return string(decoded), nil
+	}
+
+	if decoded, err := base64.RawStdEncoding.DecodeString(value); err == nil {
+		return string(decoded), nil
+	}
+
+	// Some values lose their padding when the characters are shuffled, so add
+	// it back before the last attempt.
+	if remainder := len(value) % 4; remainder != 0 {
+		value += strings.Repeat("=", 4-remainder)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", err
+	}
+
+	return string(decoded), nil
 }
 
 func IsMagnetLink(link string) bool {

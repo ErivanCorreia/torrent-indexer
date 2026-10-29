@@ -128,6 +128,77 @@ func TestStarckFilmesParseDetails(t *testing.T) {
 	}
 }
 
+func TestStarckFilmesParseDetailsXID(t *testing.T) {
+	// current layout: the magnet links are only available as an obfuscated
+	// "xid" parameter in the download buttons, there is no data-u attribute.
+	doc := loadFixture(t, "starck_detail_xid.html")
+
+	details := parseStarckFilmesDetails(doc)
+
+	if details.Title != "Coyote vs. Acme" {
+		t.Errorf("Title = %q, want %q", details.Title, "Coyote vs. Acme")
+	}
+
+	if details.Year != "2026" {
+		t.Errorf("Year = %q, want %q", details.Year, "2026")
+	}
+
+	if len(details.MagnetLinks) != 2 {
+		t.Fatalf("len(MagnetLinks) = %d, want 2", len(details.MagnetLinks))
+	}
+
+	for _, magnetLink := range details.MagnetLinks {
+		if !strings.HasPrefix(magnetLink, "magnet:?xt=urn:btih:") {
+			t.Errorf("MagnetLink = %q, expected a magnet URI", magnetLink)
+		}
+	}
+
+	if len(details.Size) != 2 {
+		t.Errorf("len(Size) = %d, want 2 (%v)", len(details.Size), details.Size)
+	}
+
+	if len(details.Audio) == 0 {
+		t.Error("len(Audio) = 0, expected the audio languages")
+	}
+}
+
+func TestStarckFilmesXIDFromHref(t *testing.T) {
+	tests := []struct {
+		name string
+		href string
+		want string
+	}{
+		{
+			name: "download link",
+			href: "https://filmedl.com/?xid=abc123",
+			want: "abc123",
+		},
+		{
+			name: "download link with extra params",
+			href: "https://filmedl.com/?xid=abc123&foo=bar",
+			want: "abc123",
+		},
+		{
+			name: "plain magnet link",
+			href: "magnet:?xt=urn:btih:abc123",
+			want: "",
+		},
+		{
+			name: "unrelated link",
+			href: "https://starckfilmes-v28.com/catalog/moana/",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := starckXIDFromHref(tt.href); got != tt.want {
+				t.Errorf("starckXIDFromHref() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStarckFilmesPublishedDateFromLink(t *testing.T) {
 	// the starck links carry the date as "dd-mm-yyyy" next to the release year,
 	// e.g. "/catalog/moana-2026-21-10-2026/"

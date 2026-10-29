@@ -64,6 +64,24 @@ func extractStarckLinks(doc *goquery.Document) []string {
 	return links
 }
 
+// starckXIDFromHref extracts the obfuscated "xid" query parameter from a
+// download button link, e.g. "https://filmedl.com/?xid=...".
+func starckXIDFromHref(href string) string {
+	const marker = "xid="
+
+	index := strings.Index(href, marker)
+	if index < 0 {
+		return ""
+	}
+
+	xid := href[index+len(marker):]
+	if end := strings.IndexByte(xid, '&'); end >= 0 {
+		xid = xid[:end]
+	}
+
+	return strings.TrimSpace(xid)
+}
+
 func (i *Indexer) HandlerStarckFilmesIndexer(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	metadata := starck_filmes
@@ -175,8 +193,11 @@ type starckFilmesDetails struct {
 
 // parseStarckFilmesDetails extracts the metadata of a movie page.
 //
-// The magnet links are not stored in the "href" attribute, they are encoded in
-// the "data-u" attribute and need to be decoded.
+// The magnet links are not stored in the "href" attribute as plain text: the
+// current layout shuffles the characters of a base64-encoded magnet link and
+// exposes it in the "xid" parameter of the download buttons, while the legacy
+// layout stored the shuffled magnet link itself in the "data-u" attribute.
+// Both formats need to be decoded.
 func parseStarckFilmesDetails(doc *goquery.Document) starckFilmesDetails {
 	post := doc.Find(".post")
 	capa := post.Find(".capa")
@@ -185,22 +206,39 @@ func parseStarckFilmesDetails(doc *goquery.Document) starckFilmesDetails {
 
 	var magnetLinks []string
 
-	postButtons.Find("a[href^=\"magnet\"]").Each(func(_ int, s *goquery.Selection) {
-		magnetLink, _ := s.Attr("href")
-		if magnetLink != "" {
-			magnetLinks = append(magnetLinks, magnetLink)
-		}
-	})
-
-	postButtons.Find("a[data-u]").Each(func(_ int, s *goquery.Selection) {
-		dataU, _ := s.Attr("data-u")
-		magnetLink, err := utils.DecodeStarckDataU(dataU)
-		if err != nil {
-			logging.Warn().Err(err).Str("data_u", dataU).Msg("Failed to decode data-u attribute, skipping")
+	postButtons.Find("a").Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		if strings.HasPrefix(href, "magnet:?") {
+			magnetLinks = append(magnetLinks, href)
 			return
 		}
+
+		if dataU, exists := s.Attr("data-u"); exists && dataU != "" {
+			magnetLink, err := utils.DecodeStarckDataU(dataU)
+			if err != nil {
+				logging.Warn().Err(err).Str("data_u", dataU).Msg("Failed to decode data-u attribute, skipping")
+			} else {
+				magnetLinks = append(magnetLinks, magnetLink)
+			}
+		}
+
+		xid := starckXIDFromHref(href)
+		if xid == "" {
+			return
+		}
+
+		magnetLink, err := utils.DecodeStarckXID(xid)
+		if err != nil {
+			logging.Warn().Err(err).Str("href", href).Msg("Failed to decode download link, skipping")
+			return
+		}
+
 		magnetLinks = append(magnetLinks, magnetLink)
 	})
+
+	// The same magnet may be present in both the data-u attribute and the
+	// download href on pages that still use the legacy layout.
+	magnetLinks = utils.StableUniq(magnetLinks)
 
 	var audio []schema.Audio
 	var year string
